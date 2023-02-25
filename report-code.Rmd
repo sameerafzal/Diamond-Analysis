@@ -1,0 +1,1540 @@
+---
+title: "dasl"
+author: "Sameer Afzal"
+date: "2022-12-18"
+output: html_document
+---
+
+```{r}
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(pacman)
+library(nnet)
+pacman::p_load(pacman, dplyr, ggplot2, rio, gridExtra, scales, ggcorrplot, caret)
+```
+
+```{r}
+data = read.csv("diamonds.csv")
+```
+
+```{r}
+names(data)
+```
+
+```{r}
+head(data)
+```
+
+```{r}
+tail(data)
+```
+
+```{r}
+str(data)
+```
+
+```{r}
+summary(data)
+```
+
+```{r}
+data$cut <- factor(data$cut)
+summary(data$cut)
+```
+
+# **CUT**
+
+```{r}
+ggplot(data=data, aes(x = cut)) +
+  geom_bar()
+```
+
+# **CARAT**
+
+```{r}
+length(data$carat)
+```
+
+```{r}
+summary(data$carat)
+```
+
+```{r}
+sd(data$carat)
+```
+
+```{r}
+var(data$carat)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$carat)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$carat , 0.75)) - (quantile(data$carat , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$carat)
+```
+
+```{r}
+boxplot(data$carat, main = "carat")
+points(mean(data$carat))
+```
+
+```{r}
+hist(data$carat, freq = FALSE, main = "Histogram of carat",xlab = "Carat")
+lines(density(data$carat),col="red")
+```
+
+```{r}
+moments::kurtosis(data$carat)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$carat, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$carat, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$carat, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$carat, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$carat, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.IG,fit.LOGNO)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$carat~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$carat~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$carat~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$carat~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$carat~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.LOGNO.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.LOGNO.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.LOGNO.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.LOGNO.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$carat, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$carat),max(data$carat),length=length(data$carat)),
+fit.LOGNO.variable[["prob"]][1]*dGA(seq(min(data$carat),max(data$carat),length=length(data$carat)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$carat),max(data$carat),length=length(data$carat)),
+fit.LOGNO.variable[["prob"]][2]*dGA(seq(min(data$carat),max(data$carat),
+length=length(data$carat)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$carat),max(data$carat),length=length(data$carat)),
+fit.LOGNO.variable[["prob"]][1]*dGA(seq(min(data$carat),max(data$carat),
+length =length(data$carat)), mu = mu.hat1, sigma = sigma.hat1) + fit.LOGNO.variable[["prob"]][2]*dGA(seq(min(data$carat),max(data$carat),
+length=length(data$carat)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# **DEPTH**
+
+```{r}
+length(data$depth)
+```
+
+```{r}
+summary(data$depth)
+```
+
+```{r}
+sd(data$depth)
+```
+
+```{r}
+var(data$depth)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$depth)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$depth , 0.75)) - (quantile(data$depth , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$depth)
+```
+
+```{r}
+boxplot(data$depth, main = "Depth")
+points(mean(data$depth))
+```
+
+```{r}
+hist(data$depth, freq = FALSE, main = "Histogram of Depth",xlab = "Depth")
+lines(density(data$depth),col="red")
+```
+
+```{r}
+moments::kurtosis(data$depth)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$depth, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$depth, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$depth, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$depth, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$depth, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+# LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.gamma,fit.EXP)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$depth~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$depth~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$depth~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$depth~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$depth~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.IG.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.IG.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.IG.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.IG.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$depth, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$depth),max(data$depth),length=length(data$depth)),
+fit.IG.variable[["prob"]][1]*dGA(seq(min(data$depth),max(data$depth),length=length(data$depth)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$depth),max(data$depth),length=length(data$depth)),
+fit.IG.variable[["prob"]][2]*dGA(seq(min(data$depth),max(data$depth),
+length=length(data$depth)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$depth),max(data$depth),length=length(data$depth)),
+fit.IG.variable[["prob"]][1]*dGA(seq(min(data$depth),max(data$depth),
+length =length(data$depth)), mu = mu.hat1, sigma = sigma.hat1) + fit.IG.variable[["prob"]][2]*dGA(seq(min(data$depth),max(data$depth),
+length=length(data$depth)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# TABLE
+
+```{r}
+length(data$table)
+```
+
+```{r}
+summary(data$table)
+```
+
+```{r}
+sd(data$table)
+```
+
+```{r}
+var(data$table)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$table)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$table , 0.75)) - (quantile(data$table , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$table)
+```
+
+```{r}
+boxplot(data$table, main = "Table")
+points(mean(data$table))
+```
+
+```{r}
+hist(data$table, freq = FALSE, main = "Histogram of Table",xlab = "Table")
+lines(density(data$table),col="red")
+```
+
+```{r}
+moments::kurtosis(data$table)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$table, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$table, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$table, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$table, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$table, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.IG,fit.EXP)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$table~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$table~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$table~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$table~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$table~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.IG.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.IG.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.IG.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.IG.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$table, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$table),max(data$table),length=length(data$table)),
+fit.IG.variable[["prob"]][1]*dGA(seq(min(data$table),max(data$table),length=length(data$table)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$table),max(data$table),length=length(data$table)),
+fit.IG.variable[["prob"]][2]*dGA(seq(min(data$table),max(data$table),
+length=length(data$table)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$table),max(data$table),length=length(data$table)),
+fit.IG.variable[["prob"]][1]*dGA(seq(min(data$table),max(data$table),
+length =length(data$table)), mu = mu.hat1, sigma = sigma.hat1) + fit.IG.variable[["prob"]][2]*dGA(seq(min(data$table),max(data$table),
+length=length(data$table)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# X
+
+```{r}
+length(data$x)
+```
+
+```{r}
+summary(data$x)
+```
+
+```{r}
+sd(data$x)
+```
+
+```{r}
+var(data$x)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$x)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$x , 0.75)) - (quantile(data$x , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$x)
+```
+
+```{r}
+boxplot(data$x, main = "X")
+points(mean(data$x))
+```
+
+```{r}
+hist(data$x, freq = FALSE, main = "Histogram of X",xlab = "X")
+lines(density(data$x),col="red")
+```
+
+```{r}
+moments::kurtosis(data$x)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$x, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$x, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$x, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$x, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$x, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.IG,fit.EXP)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$x~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$x~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$x~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$x~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$x~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.IG.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.IG.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.IG.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.IG.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$x, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$x),max(data$x),length=length(data$x)),
+fit.IG.variable[["prob"]][1]*dGA(seq(min(data$x),max(data$x),length=length(data$x)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$x),max(data$x),length=length(data$x)),
+fit.IG.variable[["prob"]][2]*dGA(seq(min(data$x),max(data$x),
+length=length(data$x)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$x),max(data$x),length=length(data$x)),
+fit.IG.variable[["prob"]][1]*dGA(seq(min(data$x),max(data$x),
+length =length(data$x)), mu = mu.hat1, sigma = sigma.hat1) + fit.IG.variable[["prob"]][2]*dGA(seq(min(data$x),max(data$x),
+length=length(data$x)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# Y
+
+```{r}
+length(data$y)
+```
+
+```{r}
+summary(data$y)
+```
+
+```{r}
+sd(data$y)
+```
+
+```{r}
+var(data$y)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$y)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$y , 0.75)) - (quantile(data$y , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$y)
+```
+
+```{r}
+boxplot(data$y, main = "Y")
+points(mean(data$y))
+```
+
+```{r}
+hist(data$y, freq = FALSE, main = "Histogram of Y",xlab = "Y")
+lines(density(data$y),col="red")
+```
+
+```{r}
+moments::kurtosis(data$y)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$y, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$y, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$y, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$y, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$y, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.IG,fit.EXP)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$y~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$y~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$y~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$y~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$y~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.GA.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.GA.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.GA.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.GA.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$y, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$y),max(data$y),length=length(data$y)),
+fit.GA.variable[["prob"]][1]*dGA(seq(min(data$y),max(data$y),length=length(data$y)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$y),max(data$y),length=length(data$y)),
+fit.GA.variable[["prob"]][2]*dGA(seq(min(data$y),max(data$y),
+length=length(data$y)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$y),max(data$y),length=length(data$y)),
+fit.GA.variable[["prob"]][1]*dGA(seq(min(data$y),max(data$y),
+length =length(data$y)), mu = mu.hat1, sigma = sigma.hat1) + fit.GA.variable[["prob"]][2]*dGA(seq(min(data$y),max(data$y),
+length=length(data$y)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# Z
+
+```{r}
+length(data$z)
+```
+
+```{r}
+summary(data$z)
+```
+
+```{r}
+sd(data$z)
+```
+
+```{r}
+var(data$z)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$z)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$z , 0.75)) - (quantile(data$z , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$z)
+```
+
+```{r}
+boxplot(data$z, main = "Z")
+points(mean(data$z))
+```
+
+```{r}
+hist(data$z, freq = FALSE, main = "Histogram of Z",xlab = "Z")
+lines(density(data$z),col="red")
+```
+
+```{r}
+moments::kurtosis(data$z)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$z, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$z, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$z, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$z, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$z, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.IG,fit.EXP)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$z~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$z~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$z~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$z~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$z~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.LOGNO.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.LOGNO.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.LOGNO.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.LOGNO.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$z, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$z),max(data$z),length=length(data$z)),
+fit.LOGNO.variable[["prob"]][1]*dGA(seq(min(data$z),max(data$z),length=length(data$z)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$z),max(data$z),length=length(data$z)),
+fit.LOGNO.variable[["prob"]][2]*dGA(seq(min(data$z),max(data$z),
+length=length(data$z)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$z),max(data$z),length=length(data$z)),
+fit.LOGNO.variable[["prob"]][1]*dGA(seq(min(data$z),max(data$z),
+length =length(data$z)), mu = mu.hat1, sigma = sigma.hat1) + fit.LOGNO.variable[["prob"]][2]*dGA(seq(min(data$z),max(data$z),
+length=length(data$z)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# PRICE
+
+```{r}
+length(data$price)
+```
+
+```{r}
+summary(data$price)
+```
+
+```{r}
+sd(data$price)
+```
+
+```{r}
+var(data$price)
+```
+
+```{r}
+#calculating the mode
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+getmode(data$price)
+```
+
+```{r}
+#2nd Qu.
+
+(quantile(data$price , 0.75)) - (quantile(data$price , 0.25))
+```
+
+```{r}
+#install.packages("moments")
+
+library(moments)
+
+moments::skewness(data$price)
+```
+
+```{r}
+boxplot(data$price, main = "Price")
+points(mean(data$price))
+```
+
+```{r}
+hist(data$price, freq = FALSE, main = "Histogram of Price",xlab = "Price")
+lines(density(data$price),col="red")
+```
+
+```{r}
+moments::kurtosis(data$price)
+```
+
+```{r}
+library(gamlss)
+library(gamlss.mx) 
+
+par(mfrow=c(1,2))
+
+fit.gamma <- gamlss::histDist(data$price, family=GA, nbins=30, main="Gamma distribution")
+
+fit.EXP <- gamlss::histDist(data$price, family=EXP, nbins=30, main="Exponential distribution")
+
+fit.LOGNO <- gamlss::histDist(data$price, family=LOGNO, nbins=30, main="Log-Normal distribution")
+
+fit.WEI <- gamlss::histDist(data$price, family=WEI, nbins=30, main="Weibull distribution")
+
+fit.IG <- gamlss::histDist(data$price, family=IG, nbins=30, main="Inverse Gaussian distribution")
+
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian"),
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit),           
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG)),
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG)),
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc))
+```
+
+```{r}
+library(lmtest)
+
+lmtest::lrtest(fit.IG,fit.EXP)
+```
+
+```{r}
+par(mfrow=c(1,3))
+fit.GA.variable <- gamlssMXfits(n = 5, data$price~1, family = GA, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.EXP.variable <- gamlssMXfits(n = 5, data$price~1, family = EXP, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.LOGNO.variable <- gamlssMXfits(n = 5, data$price~1, family = LOGNO, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.WEI.variable <- gamlssMXfits(n = 5, data$price~1, family = WEI, K = 2, data = data)
+par(mfrow=c(1,3))
+fit.IG.variable <- gamlssMXfits(n = 5, data$price~1, family = IG, K = 2, data = data)
+```
+
+```{r}
+mu.hat1<-exp(fit.WEI.variable[["models"]][[1]][["mu.coefficients"]])
+sigma.hat1<-exp(fit.WEI.variable[["models"]][[1]][["sigma.coefficients"]])
+mu.hat2<-exp(fit.WEI.variable[["models"]][[2]][["mu.coefficients"]])
+sigma.hat2<-exp(fit.WEI.variable[["models"]][[2]][["sigma.coefficients"]])
+
+hist(data$price, breaks = 50,freq = FALSE)
+
+lines(seq(min(data$price),max(data$price),length=length(data$price)),
+fit.WEI.variable[["prob"]][1]*dGA(seq(min(data$price),max(data$price),length=length(data$price)), 
+mu = mu.hat1, sigma = sigma.hat1),lty=2,lwd=3,col=2)
+
+lines(seq(min(data$price),max(data$price),length=length(data$price)),
+fit.WEI.variable[["prob"]][2]*dGA(seq(min(data$price),max(data$price),
+length=length(data$price)), mu = mu.hat2, sigma = sigma.hat2),lty=2,lwd=3,col=3)
+
+lines(seq(min(data$price),max(data$price),length=length(data$price)),
+fit.WEI.variable[["prob"]][1]*dGA(seq(min(data$price),max(data$price),
+length =length(data$price)), mu = mu.hat1, sigma = sigma.hat1) + fit.WEI.variable[["prob"]][2]*dGA(seq(min(data$price),max(data$price),
+length=length(data$price)), mu = mu.hat2, sigma = sigma.hat2), lty = 1, lwd = 3, col = 1)
+```
+
+```{r}
+data.frame(row.names=c("Gamma", "Exponentional", "Log-Normal", "Weibull","Inverse Gaussian","M.Gamma", "M.Exponentional", "M.Log-Normal", "M.Weibull","M.Inverse Gaussian"),
+
+ DF=c(fit.gamma$df.fit, fit.EXP$df.fit, fit.LOGNO$df.fit, fit.WEI$df.fit, fit.IG$df.fit, fit.GA.variable$df.fit, fit.EXP.variable$df.fit, fit.LOGNO.variable$df.fit, fit.WEI.variable$df.fit, fit.IG.variable$df.fit),
+ 
+ LOGLIK=c(logLik(fit.gamma),logLik(fit.EXP),logLik(fit.LOGNO),logLik(fit.WEI),logLik(fit.IG),logLik(fit.GA.variable),logLik(fit.EXP.variable),logLik(fit.LOGNO.variable),logLik(fit.WEI.variable),logLik(fit.IG.variable)),
+ 
+ AIC=c(AIC(fit.gamma), AIC(fit.EXP), AIC(fit.LOGNO),AIC(fit.WEI), AIC(fit.IG),AIC(fit.GA.variable), AIC(fit.EXP.variable), AIC(fit.LOGNO.variable),AIC(fit.WEI.variable), AIC(fit.IG.variable)),
+ 
+ BIC=c(fit.gamma$sbc, fit.EXP$sbc, fit.LOGNO$sbc, fit.WEI$sbc, fit.IG$sbc,fit.GA.variable$sbc, fit.EXP.variable$sbc, fit.LOGNO.variable$sbc, fit.WEI.variable$sbc, fit.IG.variable$sbc))
+```
+
+# Preliminary Analysis:
+
+```{r}
+data.sub<-data[-c(2)]
+names(data.sub)
+```
+
+```{r}
+#install.packages("psych")
+library(psych)
+data_pca <- data.sub
+plot <- pairs.panels(data_pca, hist.col="green", density = TRUE, ellipses = FALSE)
+```
+
+# Principal component analysis
+
+```{r}
+apply(data_pca, 2, mean)
+```
+
+```{r}
+apply(data_pca, 2, var)
+```
+
+```{r}
+scaled_data<-apply(data_pca, 2, scale)
+head(scaled_data)
+```
+
+```{r}
+data_cov <- cov(scaled_data)
+data_eigen <- eigen(data_cov)
+data_eigen$value
+```
+
+```{r}
+phi <- data_eigen$vectors[,1:3]
+phi <- -phi
+row.names(phi) <- c("carat","depth","table","price","x","y","z")
+colnames(phi) <- c("PC1","PC2","PC3")
+
+phi
+```
+
+```{r}
+PC1 <- scaled_data %*% phi[,1]
+PC2 <- scaled_data %*% phi[,2]
+PC <- data.frame(ID = data$price, PC1, PC2)
+head(PC)
+```
+
+```{r}
+pr.out = prcomp(data.sub, scale=TRUE)
+pr.out$rotation[, 1:2]
+```
+
+```{r}
+library(ggplot2)
+#install.packages("modelr")
+
+```
+
+```{r}
+biplot(pr.out, scale=0)
+```
+
+```{r}
+pve = pr.var/sum(pr.var)
+pve
+```
+
+```{r}
+ggplot(PC, aes(PC1, PC2)) +
+modelr::geom_ref_line(h = 0) +
+modelr::geom_ref_line(v = 0) +
+geom_text(aes(label = ID), size = 3) +
+xlab("First Principal Component") +
+ylab("Second Principal Component") +
+ggtitle("Scores-1PC and 2PC")
+```
+
+```{r}
+
+```
+
+```{r}
+data_pca_biplot <- prcomp(data_pca, scale. = TRUE)
+biplot(data_pca_biplot, scale=0)
+abline(h=0)
+abline(v=0)
+```
+
+```{r}
+cor(data_pca)
+```
+
+```{r}
+data_eigen$values
+```
+
+```{r}
+PVE <- data_eigen$values/sum(data_eigen$values)
+```
+
+```{r}
+cumsum(PVE)
+```
+
+```{r}
+plot(PVE, xlab="Principal Component", ylab="Proportion of Variance Explained",
+main="Scree Plot", ylim=c(0,1), type='b')
+```
+
+```{r}
+plot(cumsum(PVE), xlab="Principal Component", main="Cumulative Scree Plot",
+ylab="Cumulative Proportion of Variance Explained", ylim=c(0,1),type='b')
+```
+
+```{r}
+?apply()
+```
+
+```{r}
+#install.packages("clustertend")
+library(clustertend)
+d_scale <- scale(data.sub)
+hopkins(d_scale, n=nrow(d_scale)-1)
+```
+
+# Cluster Analysis
+
+```{r}
+data.sub <- scale(data.sub)
+dist.eucl <- dist(data.sub, method = "euclidean")
+eucl <- round(as.matrix(dist.eucl)[1:7,1:7],2)
+rownames(eucl) <- c("carat", "depth", "table", "price", "x","y","z")
+colnames(eucl) <- c("carat", "depth", "table", "price", "x","y","z")
+eucl
+```
+
+```{r}
+library(psych)
+#install.packages("mclust")
+library(mclust)
+data_cluster<-data.sub
+pairs.panels(data_cluster, main= "Original space - Bivariate scatter plots",ellipses = FALSE)
+```
+
+```{r}
+data_cluster_scaled <- scale(data_cluster)
+```
+
+```{r}
+#install.packages("clustertend")
+library(clustertend)
+```
+
+```{r}
+hopkins(data_cluster_scaled,n=nrow(data_cluster_scaled)-1)
+```
+
+```{r}
+#install.packages("factoextra")
+library(factoextra)
+```
+
+```{r}
+fviz_dist(dist(data_cluster_scaled), show_labels = FALSE) + labs(title="Ordered Dissimilarity Matrix",gradient = list(low = "red", mid = "white", high ="blue"))
+```
+
+```{r}
+dist.eucl <- dist(data_cluster_scaled, method = "euclidean")
+eucl <- round(as.matrix(dist.eucl)[1:7, 1:7], 2)
+#rownames(eucl) <- c("AccelSec","TopSpeed_KmH","Range_Km","Efficiency_WhKm","FastCharge_KmH","PriceEuro")
+#colnames(eucl) <- c("AccelSec","TopSpeed_KmH","Range_Km","Efficiency_WhKm","FastCharge_KmH","PriceEuro")
+eucl
+```
+
+```{r}
+dist.man <- dist(data_cluster_scaled, method = "manhattan")
+man <- round(as.matrix(dist.man)[1:7, 1:7], 2)
+rownames(man) <- c("carat", "depth", "table", "price", "x","y","z")
+colnames(man) <- c("carat", "depth", "table", "price", "x","y","z")
+man
+```
+
+```{r}
+fviz_dist(dist.eucl)
+```
+
+```{r}
+fviz_dist(dist.man)
+```
+
+```{r}
+res.hc <- hclust(d = dist.eucl, method = "ward.D2")
+fviz_dend(res.hc, cex = 0.5,subtitle = "A.H.C based on Euclidean distance and Ward's linkage method")
+```
+
+```{r}
+res.coph <- cophenetic(res.hc)
+cor(dist.eucl, res.coph)
+```
+
+```{r}
+grp <- cutree(res.hc, k = 3)
+fviz_dend(res.hc, k = 3, cex = 0.5, k_colors = c("#00AFBB", "#E7B800", "#FC4E07"), color_labels_by_k = TRUE, rect = TRUE)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch=grp, col=c("#00AFBB", "#E7B800", "#FC4E07")[grp])
+```
+
+```{r}
+res.hc2 <- hclust(d = dist.eucl, method = "average")
+fviz_dend(res.hc2, cex = 0.5,subtitle = "A.H.C based on Euclidean distance and average linkage method")
+```
+
+```{r}
+res.coph2 <- cophenetic(res.hc2)
+cor(dist.eucl, res.coph2)
+```
+
+```{r}
+grp <- cutree(res.hc2, k = 3)
+fviz_dend(res.hc2, k = 3, cex = 0.5, k_colors = c("#00AFBB", "#E7B800", "#FC4E07"), color_labels_by_k = TRUE, rect = TRUE)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch=grp, col=c("#00AFBB", "#E7B800", "#FC4E07")[grp])
+```
+
+```{r}
+res.hc3 <- hclust(d = dist.eucl, method = "single")
+fviz_dend(res.hc3, cex = 0.5,subtitle = "A.H.C based on Euclidean distance and single linkage method")
+```
+
+```{r}
+res.coph3 <- cophenetic(res.hc3)
+cor(dist.eucl, res.coph3)
+```
+
+```{r}
+grp <- cutree(res.hc3, k = 3)
+fviz_dend(res.hc3, k = 3, cex = 0.5, k_colors = c("#00AFBB", "#E7B800", "#FC4E07"), color_labels_by_k = TRUE, rect = TRUE)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch=grp, col=c("#00AFBB", "#E7B800", "#FC4E07")[grp])
+```
+
+```{r}
+res.hc4 <- hclust(d = dist.man, method = "ward.D2")
+fviz_dend(res.hc4, cex = 0.5,subtitle = "A.H.C based on manhattan distance and ward's linkage method")
+```
+
+```{r}
+res.coph4 <- cophenetic(res.hc4)
+cor(dist.man, res.coph4)
+```
+
+```{r}
+grp <- cutree(res.hc4, k = 3)
+fviz_dend(res.hc4, k = 3, cex = 0.5, k_colors = c("#00AFBB", "#E7B800", "#FC4E07"), color_labels_by_k = TRUE, rect = TRUE)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch=grp, col=c("#00AFBB", "#E7B800", "#FC4E07")[grp])
+```
+
+```{r}
+res.hc5 <- hclust(d = dist.man, method = "average")
+fviz_dend(res.hc5, cex = 0.5,subtitle = "A.H.C based on manhattan distance and average linkage method")
+```
+
+```{r}
+res.coph5 <- cophenetic(res.hc5)
+cor(dist.man, res.coph5)
+```
+
+```{r}
+grp <- cutree(res.hc5, k = 3)
+fviz_dend(res.hc5, k = 3, cex = 0.5, k_colors = c("#00AFBB", "#E7B800", "#FC4E07"), color_labels_by_k = TRUE, rect = TRUE)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch=grp, col=c("#00AFBB", "#E7B800", "#FC4E07")[grp])
+```
+
+```{r}
+res.hc6 <- hclust(d = dist.man, method = "single")
+fviz_dend(res.hc6, cex = 0.5,subtitle = "A.H.C based on manhattan distance and single linkage method")
+```
+
+```{r}
+res.coph6 <- cophenetic(res.hc6)
+cor(dist.man, res.coph6)
+```
+
+```{r}
+grp <- cutree(res.hc6, k = 3)
+fviz_dend(res.hc6, k = 3, cex = 0.5, k_colors = c("#00AFBB", "#E7B800", "#FC4E07"), color_labels_by_k = TRUE, rect = TRUE)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch=grp, col=c("#00AFBB", "#E7B800", "#FC4E07")[grp])
+```
+
+# B - Partitioning Clustering
+
+```{r}
+km.res <- kmeans(data_cluster_scaled, 2, nstart = 25)
+km.res$size
+```
+
+```{r}
+cl <- km.res$cluster
+pairs(data_cluster_scaled, gap=0, pch=cl, col=c("#2E9FDF", "#FC4E07")[cl])
+```
+
+```{r}
+km.res2 <- kmeans(data_cluster_scaled, 4, nstart = 25)
+km.res2$size
+```
+
+```{r}
+fviz_cluster(km.res2, data = data_cluster_scaled,palette = c("#2E9FDF", "#FC4E07", "#CF3E4B", "#287233"),ellipse.type = "euclid", star.plot = TRUE,repel = TRUE, ggtheme = theme_minimal() )
+```
+
+```{r}
+cl2 <- km.res2$cluster
+pairs(data_cluster_scaled, gap=0, pch=cl, col=c("#2E9FDF", "#FC4E07","#CF3E4B", "#287233")[cl2])
+```
+
+```{r}
+#install.packages("cluster")
+library(cluster)
+pam.res <- pam(data_cluster_scaled, 2)
+pam.res$medoids
+```
+
+```{r}
+cl3 <- pam.res$cluster
+pairs(data_cluster_scaled, gap=0, pch=cl, col=c("#2E9FDF", "#FC4E07")[cl3])
+
+```
+
+# cluster validation
+
+```{r}
+library(clustertend)
+clustertend::hopkins(data_cluster_scaled, n = nrow(data_cluster_scaled)-1)
+```
+
+```{r}
+#install.packages("hopkins")
+library(hopkins)
+n = nrow(data_cluster_scaled)-1
+hopkins::hopkins(data_cluster_scaled, n)
+```
+
+```{r}
+library(factoextra)
+res <- get_clust_tendency(data_cluster_scaled, n = nrow(data_cluster_scaled)-1, graph = FALSE)
+res$hopkins_stat
+```
+
+```{r}
+random_df <- apply(data.sub, 2, 
+                function(x){runif(length(x), min(x), (max(x)))})
+random_df <- as.data.frame(random_df)
+random_df <- scale(random_df)
+```
+
+```{r}
+library(factoextra)
+res <- get_clust_tendency(random_df, n = nrow(random_df)-1, graph = FALSE)
+res$hopkins_stat
+```
+
+```{r}
+random_df = apply(data_cluster_scaled, 2, function(x){runif(length(x), min(x),(max(x)))})
+random_df=as.data.frame(random_df)
+scaled.random_df=scale(random_df)
+pairs(scaled.random_df, gap = 0, pch = 21)
+
+library(clustertend)
+set.seed(123)
+n=nrow(data_cluster_scaled)-1
+hopkins(data_cluster_scaled, n)
+n=nrow(scaled.random_df)-1
+hopkins(scaled.random_df, n)
+```
+
+```{r}
+fviz_dist(dist(data_cluster_scaled), show_labels = FALSE)+ labs(title = "EV data")
+```
+
+```{r}
+fviz_dist(dist(random_df), show_labels = FALSE)+ labs(title = "random_df EV data")
+```
+
+```{r}
+fviz_nbclust(data_cluster_scaled, kmeans, method = "wss") + geom_vline(xintercept = 4, linetype = 2)+labs(subtitle = "Elbow method")
+```
+
+```{r}
+fviz_nbclust(data_cluster_scaled, kmeans, method = "silhouette") + labs(subtitle = "Silhouette method")
+```
+
+```{r}
+set.seed(123)
+fviz_nbclust(data_cluster_scaled, kmeans, nstart = 25, method = "gap_stat", nboot = 500)+labs(subtitle = "Gap statistic method")
+```
+
+```{r}
+#install.packages("NbClust")
+library(NbClust)
+#install.packages("factoextra")
+library(factoextra)
+nb <- NbClust(data_cluster_scaled, distance = "euclidean", min.nc = 2,max.nc = 10, method = "kmeans")
+```
+
+```{r}
+class(nb$Best.nc)
+fviz_nbclust(nb)
+```
+
+```{r}
+km.res <- eclust(data_cluster_scaled, "kmeans", k = 2, nstart = 25, graph = FALSE)
+fviz_silhouette(km.res, palette = "jco", ggtheme = theme_classic())
+```
+
+```{r}
+silinfo$avg.width
+```
+
+```{r}
+sil <- km.res$silinfo$widths[, 1:3]
+neg_sil_index_aver.eu<- which(sil[, "sil_width"] < 0)
+sil[neg_sil_index_aver.eu, , drop = FALSE]
+```
+
+```{r}
+km.res <- eclust(data_cluster_scaled, "kmeans", k = 2, nstart = 25, graph = FALSE)
+fviz_silhouette(km.res, palette = "jco", ggtheme = theme_classic())
+```
+
+```{r}
+#install.packages("fpc")
+library(fpc)
+
+
+```
+
+```{r}
+km_stats <- cluster.stats(dist(data_cluster_scaled), km.res$cluster)
+km_stats$dunn
+```
+
+```{r}
+#install.packages("clValid")
+library("clValid")
+```
+
+```{r}
+clmethods <- c("hierarchical","kmeans","pam")
+intern <- clValid(data_cluster_scaled, nClust = 2:6, clMethods = clmethods, validation = "internal")
+summary(intern)
+```
+
+```{r}
+clmethods <- c("hierarchical","kmeans","pam")
+stab <- clValid(data_cluster_scaled, nClust = 2:6, clMethods = clmethods,validation = "stability")
+optimalScores(stab)
+```
+
+```{r}
+#install.packages("mclust")
+library(mclust)
+mod <- Mclust(data_cluster_scaled, G = 1:9, modelNames = NULL)
+summary(mod$BIC)
+```
+
+```{r}
+plot(mod, what = "BIC", ylim = range(mod$BIC, na.rm = TRUE), legendArgs = list(x = "bottomleft"))
+plot(mod, what = "BIC", ylim = range(mod$BIC, na.rm = TRUE), legendArgs = list(x = "bottomright"))
+```
+
+```{r}
+summary(mod)
+```
+
+```{r}
+head(round(mod$z, 6), 30)
+```
+
+```{r}
+head(mod$classification, 30)
+```
+
+```{r}
+pairs(data_cluster_scaled, gap=0, pch = 16, col = mod$classification)
+```
